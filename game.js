@@ -2,6 +2,8 @@ const canvas = document.getElementById('game-canvas')
 const ctx = canvas.getContext('2d');
 const scoreElement = document.getElementById('score-display');
 const levelElement = document.getElementById('level-display');
+const nextcanvas = document.getElementById('next-canvas');
+const nextCtx = nextcanvas.getContext('2d');
 //マスサイズ
 const TILE_SIZE = 30;
 //フィールドサイズ
@@ -9,6 +11,8 @@ const FIELD_ROWS = 20;
 const FIELD_COLS = 10;
 //現在のミノ
 let currentTetromino;
+//次のミノ
+let nextTetromino;
 //最後に描画した時間
 let lastTime = 0;
 //ミノが落下する間隔
@@ -59,23 +63,55 @@ const TETROMINOS = {
 }
 //ミノランダム生成
 function spawnNewTetromino() {
+    currentTetromino = nextTetromino;
+
     const tetrominoTypes = 'TSZLJOI';
     const randomType = tetrominoTypes[Math.floor(Math.random() * tetrominoTypes.length)];
     const newTetromino = TETROMINOS[randomType];
 
-    //現在のミノ
-    currentTetromino = {
-        x: 3,
-        y: -1,
-        shape: newTetromino
+    nextTetromino = {
+        shape: TETROMINOS[randomType],
     };
-
-    if (!isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y)) {
+    //現在のミノ
+    if(currentTetromino){
+        currentTetromino.x = 3;
+        currentTetromino.y = -1;
+    }
+    //ゲームオーバー判定
+    if (currentTetromino && !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y)) {
         alert('GAME OVER');
         field.forEach(row => row.fill(0));
+        score = 0;
+        level = 1;;
+        linesCleared = 0;
     }
 }
 
+function drawNextTetromino(){
+    nextCtx.fillStyle = '#000';
+    nextCtx.fillRect(0,0,nextcanvas.clientWidth,nextcanvas.clientHeight);
+
+    if(!nextTetromino) return;
+
+    const shape = nextTetromino.shape;
+
+    const offseetX = (nextcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
+    const offseetY = (nextcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
+
+    for(let y=0;y<shape.length;y++){
+        for(let x=0;x<shape[y].length;x++){
+            if(shape[y][x]){
+                const px = offseetX + x * TILE_SIZE;
+                const py = offseetY + y * TILE_SIZE;
+
+                nextCtx.fillStyle = 'limegreen';
+                nextCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                nextCtx.strokeStyle = '#222';
+                nextCtx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+            }
+        }
+    }
+}
 
 //ミノ描画
 function drawBlock(x, y) {
@@ -110,7 +146,7 @@ function isValidMove(shape, newX, newY) {
 }
 
 //スコア、レベル更新
-function updateUI(){
+function updateUI() {
     scoreElement.textContent = score;
     levelElement.textContent = level;
 }
@@ -138,6 +174,7 @@ function draw() {
         }
     }
     updateUI();
+    drawNextTetromino();
 }
 
 //キー操作
@@ -190,7 +227,7 @@ function rotate(matrix) {
 function update(time = 0) {
     //経過時間
     const deltaTime = time - lastTime;
-    const dropInterval = Math.max(100,1000-(level-1)*50);
+    const dropInterval = Math.max(100, 1000 - (level - 1) * 50);
     if (deltaTime > dropInterval) {
         if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
             currentTetromino.y++;
@@ -238,7 +275,7 @@ function clearLines() {
         }
     }
     //スコア機能
-    if(clearedCount > 0){
+    if (clearedCount > 0) {
         const baseScore = [0, 100, 300, 500, 800];
         score += baseScore[clearedCount] * level;
 
@@ -247,7 +284,7 @@ function clearLines() {
         level = Math.floor(linesCleared / 10) + 1;
     }
 }
-//最初のミノ生成
+//最初のcurrentとnextの生成
 spawnNewTetromino();
-
+spawnNewTetromino();
 update();
