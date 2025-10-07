@@ -4,6 +4,8 @@ const scoreElement = document.getElementById('score-display');
 const levelElement = document.getElementById('level-display');
 const nextcanvas = document.getElementById('next-canvas');
 const nextCtx = nextcanvas.getContext('2d');
+const holdcanvas = document.getElementById('hold-canvas');
+const holdCtx = holdcanvas.getContext('2d');
 //マスサイズ
 const TILE_SIZE = 30;
 //フィールドサイズ
@@ -13,6 +15,9 @@ const FIELD_COLS = 10;
 let currentTetromino;
 //次のミノ
 let nextTetromino;
+
+let holdTetromino;
+let canHold = true;
 //最後に描画した時間
 let lastTime = 0;
 //ミノが落下する間隔
@@ -108,6 +113,32 @@ function drawNextTetromino() {
                 nextCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
                 nextCtx.strokeStyle = '#222';
                 nextCtx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+            }
+        }
+    }
+}
+
+function drawHoldPiece() {
+    holdCtx.fillStyle = '#000';
+    holdCtx.fillRect(0, 0, holdcanvas.clientWidth, holdcanvas.clientHeight);
+
+    if (!holdTetromino) return;
+
+    const shape = holdTetromino.shape;
+
+    const offsetX = (holdcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
+    const offsetY = (holdcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
+
+    for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+            if (shape[y][x]) {
+                const px = offsetX + x * TILE_SIZE;
+                const py = offsetY + y * TILE_SIZE;
+
+                holdCtx.fillStyle = 'limegreen';
+                holdCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                holdCtx.strokeStyle = '#222';
+                holdCtx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
             }
         }
     }
@@ -218,6 +249,7 @@ function draw() {
     }
     updateUI();
     drawNextTetromino();
+    drawHoldPiece();
 }
 
 
@@ -243,7 +275,26 @@ document.addEventListener('keydown', (event) => {
             break;
         case 'ArrowUp':
             //右回転
-            newShape = rotate(currentTetromino.shape);
+            newShape = rotateClockwise(currentTetromino.shape);
+            break;
+        case 'z':
+            //左回転
+            newShape = rotateCounterClockwise(currentTetromino.shape);
+            break;
+        case 'c':
+            //ホールド
+            if (canHold) {
+                if (holdTetromino) {
+                    [currentTetromino, holdTetromino] = [holdTetromino, currentTetromino];
+                    currentTetromino.x = 3;
+                    currentTetromino.y = -1;
+                }
+                else {
+                    holdTetromino = currentTetromino;
+                    spawnNewTetromino();
+                }
+                canHold = false;
+            }
             break;
         case ' '://スペース
             //ハードドロップ
@@ -265,14 +316,26 @@ document.addEventListener('keydown', (event) => {
     draw();
 });
 
-//回転
-function rotate(matrix) {
+//右回転
+function rotateClockwise(matrix) {
     const N = matrix.length;
     const result = Array.from({ length: N }, () => new Array(N).fill(0));
 
     for (let y = 0; y < N; y++) {
         for (let x = 0; x < N; x++) {
             result[x][N - 1 - y] = matrix[y][x];
+        }
+    }
+    return result;
+}
+//左回転
+function rotateCounterClockwise(matrix) {
+    const N = matrix.length;
+    const result = Array.from({ length: N }, () => new Array(N).fill(0));
+
+    for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+            result[N - 1 - x][y] = matrix[y][x];
         }
     }
     return result;
@@ -312,6 +375,7 @@ function lockTetromino() {
             }
         }
     }
+    canHold = true;
     clearLines();
 }
 //ライン消去
