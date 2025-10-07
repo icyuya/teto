@@ -86,7 +86,7 @@ function spawnNewTetromino() {
         linesCleared = 0;
     }
 }
-
+//ネクストミノ描画
 function drawNextTetromino() {
     nextCtx.fillStyle = '#000';
     nextCtx.fillRect(0, 0, nextcanvas.clientWidth, nextcanvas.clientHeight);
@@ -95,14 +95,14 @@ function drawNextTetromino() {
 
     const shape = nextTetromino.shape;
 
-    const offseetX = (nextcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
-    const offseetY = (nextcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
+    const offsetX = (nextcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
+    const offsetY = (nextcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
 
     for (let y = 0; y < shape.length; y++) {
         for (let x = 0; x < shape[y].length; x++) {
             if (shape[y][x]) {
-                const px = offseetX + x * TILE_SIZE;
-                const py = offseetY + y * TILE_SIZE;
+                const px = offsetX + x * TILE_SIZE;
+                const py = offsetY + y * TILE_SIZE;
 
                 nextCtx.fillStyle = 'limegreen';
                 nextCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
@@ -150,12 +150,55 @@ function updateUI() {
     scoreElement.textContent = score;
     levelElement.textContent = level;
 }
+//ゴーストミノ描画
+function drawGhostPiece() {
+    if (!currentTetromino) return;
 
+    const ghostColor = 'rgba(255,255,255,0.2)';
+    let ghostY = currentTetromino.y;
+
+    while (isValidMove(currentTetromino.shape, currentTetromino.x, ghostY + 1)) {
+        ghostY++;
+    }
+
+    const shape = currentTetromino.shape;
+    shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value) {
+                const px = (currentTetromino.x + x) * TILE_SIZE;
+                const py = (ghostY + y) * TILE_SIZE;
+                ctx.fillStyle = ghostColor;
+                ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+            }
+        });
+    });
+}
 
 //画面描画
 function draw() {
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = '#000'; //背景
     ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+    ctx.strokeStyle = '#333';//グリッド線の色
+    ctx.lineWidth = 1;//線の太さ
+    //縦線の描画
+    for (let x = 0; x <= FIELD_COLS; x++) {
+        const px = x * TILE_SIZE + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, canvas.clientHeight);
+        ctx.stroke();
+    }
+    //横線の描画
+    for (let y = 0; y <= FIELD_ROWS; y++) {
+        const py = y * TILE_SIZE + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, py);
+        ctx.lineTo(canvas.clientWidth, py);
+        ctx.stroke();
+    }
+
+    drawGhostPiece();
 
     for (let y = 0; y < FIELD_ROWS; y++) {
         for (let x = 0; x < FIELD_COLS; x++) {
@@ -176,6 +219,8 @@ function draw() {
     updateUI();
     drawNextTetromino();
 }
+
+
 
 //キー操作
 document.addEventListener('keydown', (event) => {
