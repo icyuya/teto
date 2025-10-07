@@ -1,21 +1,37 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>ブロックパズル</title>
-        <link rel="stylesheet" href="style.css">
-    </head>
-    <body>
-        <h1>ブロックパズル</h1>
 
-        <div>
-            <p>SCORE: <span id="score-display">0</span></p>
-            <p>LEVEL: <span id="level-display">1</span></p>
-            <p>NEXT:</p>
-            <canvas id="next-canvas" width="120" height="120"></canvas>
-            <p>HOLD:</p>
+<head>
+    <title>ブロックパズル</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="game-container">
+
+        <div class="side-panel left-panel">
+            <h3>HOLD</h3>
             <canvas id="hold-canvas" width="120" height="120"></canvas>
         </div>
-        <canvas id="game-canvas" width="300" height="600"></canvas>
-        <script src="game.js"></script>
-    </body>
+
+        <div class="main-panel">
+            <canvas id="game-canvas" width="300" height="600"></canvas>
+        </div>
+
+        <div class="side-panel right-panel">
+            <div class="next-panel">
+                <h3>NEXT</h3>
+                <canvas id="next-canvas" width="120" height="500"></canvas>
+            </div>
+            <div class="info-panel">
+                <p>SCORE: <span id="score-display">0</span></p>
+                <p>LEVEL: <span id="level-display">1</span></p>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="game.js"></script>
+</body>
+
 </html>
