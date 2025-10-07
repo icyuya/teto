@@ -73,7 +73,7 @@ function spawnNewTetromino() {
         shape: TETROMINOS[randomType],
     };
     //現在のミノ
-    if(currentTetromino){
+    if (currentTetromino) {
         currentTetromino.x = 3;
         currentTetromino.y = -1;
     }
@@ -87,20 +87,20 @@ function spawnNewTetromino() {
     }
 }
 
-function drawNextTetromino(){
+function drawNextTetromino() {
     nextCtx.fillStyle = '#000';
-    nextCtx.fillRect(0,0,nextcanvas.clientWidth,nextcanvas.clientHeight);
+    nextCtx.fillRect(0, 0, nextcanvas.clientWidth, nextcanvas.clientHeight);
 
-    if(!nextTetromino) return;
+    if (!nextTetromino) return;
 
     const shape = nextTetromino.shape;
 
     const offseetX = (nextcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
     const offseetY = (nextcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
 
-    for(let y=0;y<shape.length;y++){
-        for(let x=0;x<shape[y].length;x++){
-            if(shape[y][x]){
+    for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+            if (shape[y][x]) {
                 const px = offseetX + x * TILE_SIZE;
                 const py = offseetY + y * TILE_SIZE;
 
@@ -179,32 +179,42 @@ function draw() {
 
 //キー操作
 document.addEventListener('keydown', (event) => {
+    let newX = currentTetromino.x;
+    let newY = currentTetromino.y;
+    let newShape = currentTetromino.shape;
+
     switch (event.key) {
         case 'ArrowLeft':
             //左
-            if (isValidMove(currentTetromino.shape, currentTetromino.x - 1, currentTetromino.y)) {
-                currentTetromino.x--;
-            }
+            newX--;
             break;
         case 'ArrowRight':
             //右
-            if (isValidMove(currentTetromino.shape, currentTetromino.x + 1, currentTetromino.y)) {
-                currentTetromino.x++;
-            }
+            newX++;
             break;
         case 'ArrowDown':
             //下
-            if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
-                currentTetromino.y++;
-            }
+            newY++;
             break;
         case 'ArrowUp':
             //右回転
-            const rotated = rotate(currentTetromino.shape);
-            if (isValidMove(rotated, currentTetromino.x, currentTetromino.y)) {
-                currentTetromino.shape = rotated;
-            }
+            newShape = rotate(currentTetromino.shape);
             break;
+        case ' '://スペース
+            //ハードドロップ
+            while (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+                currentTetromino.y++;
+            }
+            lockTetromino();
+            spawnNewTetromino();
+            draw();
+            return;
+    }
+
+    if (isValidMove(newShape, newX, newY)) {
+        currentTetromino.x = newX;
+        currentTetromino.y = newY;
+        currentTetromino.shape = newShape;
     }
     //再描画
     draw();
