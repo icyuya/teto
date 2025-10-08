@@ -14,7 +14,8 @@ const FIELD_COLS = 10;
 //現在のミノ
 let currentTetromino;
 //次のミノ
-let nextTetromino;
+let nextQueue = [];
+const NEXT_QUEUE_SIZE = 5;
 
 let holdTetromino;
 let canHold = true;
@@ -29,54 +30,69 @@ let linesCleared = 0;
 
 // テトリミノの形を定義
 const TETROMINOS = {
-    T: [
-        [0, 1, 0],
-        [1, 1, 1],
-        [0, 0, 0]
-    ],
-    S: [
-        [0, 1, 1],
-        [1, 1, 0],
-        [0, 0, 0]
-    ],
-    Z: [
-        [1, 1, 0],
-        [0, 1, 1],
-        [0, 0, 0]
-    ],
-    L: [
-        [0, 0, 1],
-        [1, 1, 1],
-        [0, 0, 0]
-    ],
-    J: [
-        [1, 0, 0],
-        [1, 1, 1],
-        [0, 0, 0]
-    ],
-    O: [
-        [0, 1, 1],
-        [0, 1, 1],
-        [0, 0, 0]
-    ],
-    I: [
-        [0, 0, 0, 0],
-        [1, 1, 1, 1],
-        [0, 0, 0, 0],
-        [0, 0, 0, 0]
-    ]
+    T: {
+        shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]],
+        color: 'purple'
+    },
+    S: {
+        shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]],
+        color: 'green'
+    },
+    Z: {
+        shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]],
+        color: 'red'
+    },
+    L: {
+        shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]],
+        color: 'orange'
+    },
+    J: {
+        shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]],
+        color: 'blue'
+    },
+    O: {
+        shape: [[0, 1, 1], [0, 1, 1], [0, 0, 0]],
+        color: 'yellow'
+    },
+    I: {
+        shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
+        color: 'cyan'
+    }
 }
+
+function cloneTetromino(tetromino) {
+    return {
+        ...tetromino,
+        shape: tetromino.shape.map(row => [...row])
+    };
+}
+
+
+//ネクストキューを初期化する関数
+function fillNextQueue() {
+    for (let i = 0; i < NEXT_QUEUE_SIZE; i++) {
+        const tetrominoTypes = 'TSZLJOI';
+        const randomType = tetrominoTypes[Math.floor(Math.random() * tetrominoTypes.length)];
+        const newTetrominoData = TETROMINOS[randomType];
+        nextQueue.push({
+            ...newTetrominoData,
+            type: randomType
+        });
+    }
+}
+
 //ミノランダム生成
 function spawnNewTetromino() {
-    currentTetromino = nextTetromino;
+    currentTetromino = cloneTetromino(nextQueue.shift());
 
     const tetrominoTypes = 'TSZLJOI';
     const randomType = tetrominoTypes[Math.floor(Math.random() * tetrominoTypes.length)];
-    const newTetromino = TETROMINOS[randomType];
+    const newTetrominoData = TETROMINOS[randomType];
+    nextQueue.push({
+        ...newTetrominoData,
+        type: randomType
+    });
 
-    nextTetromino = {
-        shape: TETROMINOS[randomType],
-    };
     //現在のミノ
     if (currentTetromino) {
         currentTetromino.x = 3;
@@ -89,35 +105,41 @@ function spawnNewTetromino() {
         score = 0;
         level = 1;;
         linesCleared = 0;
+        holdTetromino = null;
+        canHold = true;
+        nextQueue = [];
+        fillNextQueue();
     }
 }
+
 //ネクストミノ描画
-function drawNextTetromino() {
+function drawNextQueue() {
     nextCtx.fillStyle = '#000';
     nextCtx.fillRect(0, 0, nextcanvas.clientWidth, nextcanvas.clientHeight);
 
-    if (!nextTetromino) return;
+    nextQueue.forEach((tetromino, index) => {
+        const shape = tetromino.shape;
+        const color = tetromino.color;
 
-    const shape = nextTetromino.shape;
+        const yoffset = index * 100;
+        const offsetX = (nextcanvas.width - shape[0].length * TILE_SIZE) / 2;
+        const offsetY = yoffset + (100 - shape.length * TILE_SIZE) / 2;
 
-    const offsetX = (nextcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
-    const offsetY = (nextcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
-
-    for (let y = 0; y < shape.length; y++) {
-        for (let x = 0; x < shape[y].length; x++) {
-            if (shape[y][x]) {
-                const px = offsetX + x * TILE_SIZE;
-                const py = offsetY + y * TILE_SIZE;
-
-                nextCtx.fillStyle = 'limegreen';
-                nextCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-                nextCtx.strokeStyle = '#222';
-                nextCtx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
-            }
-        }
-    }
+        shape.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value) {
+                    const px = offsetX + x * TILE_SIZE;
+                    const py = offsetY + y * TILE_SIZE;
+                    nextCtx.fillStyle = color;
+                    nextCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                    nextCtx.strokeStyle = '#222';
+                    nextCtx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+                }
+            });
+        });
+    });
 }
-
+//ホールドミノ表示
 function drawHoldPiece() {
     holdCtx.fillStyle = '#000';
     holdCtx.fillRect(0, 0, holdcanvas.clientWidth, holdcanvas.clientHeight);
@@ -125,6 +147,7 @@ function drawHoldPiece() {
     if (!holdTetromino) return;
 
     const shape = holdTetromino.shape;
+    const color = holdTetromino.color;
 
     const offsetX = (holdcanvas.clientWidth - shape[0].length * TILE_SIZE) / 2;
     const offsetY = (holdcanvas.clientHeight - shape.length * TILE_SIZE) / 2;
@@ -135,7 +158,7 @@ function drawHoldPiece() {
                 const px = offsetX + x * TILE_SIZE;
                 const py = offsetY + y * TILE_SIZE;
 
-                holdCtx.fillStyle = 'limegreen';
+                holdCtx.fillStyle = color;
                 holdCtx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
                 holdCtx.strokeStyle = '#222';
                 holdCtx.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
@@ -145,10 +168,10 @@ function drawHoldPiece() {
 }
 
 //ミノ描画
-function drawBlock(x, y) {
+function drawBlock(x, y, color) {
     const px = x * TILE_SIZE;
     const py = y * TILE_SIZE;
-    ctx.fillStyle = 'limegreen';
+    ctx.fillStyle = color;
     ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
 
     ctx.strokeStyle = '#222';
@@ -234,21 +257,22 @@ function draw() {
     for (let y = 0; y < FIELD_ROWS; y++) {
         for (let x = 0; x < FIELD_COLS; x++) {
             if (field[y][x]) {
-                drawBlock(x, y);
+                drawBlock(x, y, field[y][x]);
             }
         }
     }
     //ミノを描画
     const shape = currentTetromino.shape;
+    const color = currentTetromino.color;
     for (let y = 0; y < shape.length; y++) {
         for (let x = 0; x < shape[y].length; x++) {
             if (shape[y][x]) {
-                drawBlock(currentTetromino.x + x, currentTetromino.y + y);
+                drawBlock(currentTetromino.x + x, currentTetromino.y + y, color);
             }
         }
     }
     updateUI();
-    drawNextTetromino();
+    drawNextQueue();
     drawHoldPiece();
 }
 
@@ -256,46 +280,88 @@ function draw() {
 
 //キー操作
 document.addEventListener('keydown', (event) => {
-    let newX = currentTetromino.x;
-    let newY = currentTetromino.y;
-    let newShape = currentTetromino.shape;
+    if (!currentTetromino) return;
 
     switch (event.key) {
         case 'ArrowLeft':
             //左
-            newX--;
+            if (isValidMove(currentTetromino.shape, currentTetromino.x - 1, currentTetromino.y)) {
+                currentTetromino.x--;
+            }
             break;
         case 'ArrowRight':
             //右
-            newX++;
+            if (isValidMove(currentTetromino.shape, currentTetromino.x + 1, currentTetromino.y)) {
+                currentTetromino.x++;
+            }
             break;
         case 'ArrowDown':
             //下
-            newY++;
+            if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+                currentTetromino.y++;
+            }
             break;
         case 'ArrowUp':
             //右回転
-            newShape = rotateClockwise(currentTetromino.shape);
+            {
+                const rotated = rotateClockwise(currentTetromino.shape);
+                const kickPatterns = [[0, 0], [-1, 0], [1, 0], [0, -1]];
+
+                for (const [kickX, kickY] of kickPatterns) {
+                    const newX = currentTetromino.x + kickX;
+                    const newY = currentTetromino.y + kickY;
+                    if (isValidMove(rotated, newX, newY)) {
+                        currentTetromino.shape = rotated;
+                        currentTetromino.x = newX;
+                        currentTetromino.y = newY;
+                        break;
+                    }
+                }
+            }
             break;
         case 'z':
             //左回転
-            newShape = rotateCounterClockwise(currentTetromino.shape);
+            {
+                const rotated = rotateCounterClockwise(currentTetromino.shape);
+                const kickPatterns = [[0, 0], [1, 0], [-1, 0], [0, -1]];
+
+                for (const [kickX, kickY] of kickPatterns) {
+                    const newX = currentTetromino.x + kickX;
+                    const newY = currentTetromino.y + kickY;
+                    if (isValidMove(rotated, newX, newY)) {
+                        currentTetromino.shape = rotated;
+                        currentTetromino.x = newX;
+                        currentTetromino.y = newY;
+                        break;
+                    }
+                }
+            }
             break;
         case 'c':
             //ホールド
             if (canHold) {
+                const typeToHold = currentTetromino.type;
                 if (holdTetromino) {
-                    [currentTetromino, holdTetromino] = [holdTetromino, currentTetromino];
+                    const heldType = holdTetromino.type;
+                    currentTetromino = cloneTetromino(TETROMINOS[heldType]);
+                    currentTetromino.type = heldType;
+
+                    holdTetromino = cloneTetromino(TETROMINOS[typeToHold]);
+                    holdTetromino.type = typeToHold;
+
                     currentTetromino.x = 3;
                     currentTetromino.y = -1;
                 }
                 else {
-                    holdTetromino = currentTetromino;
+                    holdTetromino = cloneTetromino(TETROMINOS[typeToHold]);
+                    holdTetromino.type = typeToHold;
                     spawnNewTetromino();
                 }
                 canHold = false;
+                draw();
+                return;
             }
-            break;
+            return;
         case ' '://スペース
             //ハードドロップ
             while (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
@@ -306,13 +372,6 @@ document.addEventListener('keydown', (event) => {
             draw();
             return;
     }
-
-    if (isValidMove(newShape, newX, newY)) {
-        currentTetromino.x = newX;
-        currentTetromino.y = newY;
-        currentTetromino.shape = newShape;
-    }
-    //再描画
     draw();
 });
 
@@ -363,6 +422,7 @@ function update(time = 0) {
 //ミノ設置
 function lockTetromino() {
     const shape = currentTetromino.shape;
+    const color = currentTetromino.color;
     for (let y = 0; y < shape.length; y++) {
         for (let x = 0; x < shape[y].length; x++) {
             if (shape[y][x]) {
@@ -370,7 +430,7 @@ function lockTetromino() {
                 const fieldY = currentTetromino.y + y;
 
                 if (fieldY >= 0) {
-                    field[fieldY][fieldX] = 1;
+                    field[fieldY][fieldX] = color;
                 }
             }
         }
@@ -404,6 +464,6 @@ function clearLines() {
     }
 }
 //最初のcurrentとnextの生成
-spawnNewTetromino();
+fillNextQueue();
 spawnNewTetromino();
 update();
