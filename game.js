@@ -27,6 +27,10 @@ const field = Array.from({ length: FIELD_ROWS }, () => new Array(FIELD_COLS).fil
 let score = 0;
 let level = 1;
 let linesCleared = 0;
+let bag = [];
+let lockDelayTimer = 0;
+const LOOK_DELAY = 500;
+
 
 // テトリミノの形を定義
 const TETROMINOS = {
@@ -60,6 +64,16 @@ const TETROMINOS = {
     }
 }
 
+function generateBag() {
+    let types = ['T', 'S', 'Z', 'L', 'J', 'O', 'I'];
+
+    for (let i = types.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [types[i], types[j]] = [types[j], types[i]];
+    }
+    bag = types;
+}
+
 function cloneTetromino(tetromino) {
     return {
         ...tetromino,
@@ -68,15 +82,18 @@ function cloneTetromino(tetromino) {
 }
 
 
-//ネクストキューを初期化する関数
-function fillNextQueue() {
-    for (let i = 0; i < NEXT_QUEUE_SIZE; i++) {
-        const tetrominoTypes = 'TSZLJOI';
-        const randomType = tetrominoTypes[Math.floor(Math.random() * tetrominoTypes.length)];
-        const newTetrominoData = TETROMINOS[randomType];
+function refillNextQueue() {
+    while (nextQueue.length < NEXT_QUEUE_SIZE) {
+        if (bag.length === 0) {
+            generateBag();
+        }
+
+        const type = bag.pop();
+        const newTetrominoData = TETROMINOS[type];
+
         nextQueue.push({
             ...newTetrominoData,
-            type: randomType
+            type: type
         });
     }
 }
@@ -85,13 +102,7 @@ function fillNextQueue() {
 function spawnNewTetromino() {
     currentTetromino = cloneTetromino(nextQueue.shift());
 
-    const tetrominoTypes = 'TSZLJOI';
-    const randomType = tetrominoTypes[Math.floor(Math.random() * tetrominoTypes.length)];
-    const newTetrominoData = TETROMINOS[randomType];
-    nextQueue.push({
-        ...newTetrominoData,
-        type: randomType
-    });
+    refillNextQueue();
 
     //現在のミノ
     if (currentTetromino) {
@@ -108,7 +119,8 @@ function spawnNewTetromino() {
         holdTetromino = null;
         canHold = true;
         nextQueue = [];
-        fillNextQueue();
+        bag = [];
+        refillNextQueue();
     }
 }
 
@@ -287,18 +299,27 @@ document.addEventListener('keydown', (event) => {
             //左
             if (isValidMove(currentTetromino.shape, currentTetromino.x - 1, currentTetromino.y)) {
                 currentTetromino.x--;
+                if (lockDelayTimer > 0) {
+                    lockDelayTimer = performance.now();
+                }
             }
             break;
         case 'ArrowRight':
             //右
             if (isValidMove(currentTetromino.shape, currentTetromino.x + 1, currentTetromino.y)) {
                 currentTetromino.x++;
+                if (lockDelayTimer > 0) {
+                    lockDelayTimer = performance.now();
+                }
             }
             break;
         case 'ArrowDown':
             //下
             if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
                 currentTetromino.y++;
+                if (lockDelayTimer > 0) {
+                    lockDelayTimer = performance.now();
+                }
             }
             break;
         case 'ArrowUp':
@@ -314,6 +335,9 @@ document.addEventListener('keydown', (event) => {
                         currentTetromino.shape = rotated;
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
+                        if (lockDelayTimer > 0) {
+                            lockDelayTimer = performance.now();
+                        }
                         break;
                     }
                 }
@@ -332,6 +356,9 @@ document.addEventListener('keydown', (event) => {
                         currentTetromino.shape = rotated;
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
+                        if (lockDelayTimer > 0) {
+                            lockDelayTimer = performance.now();
+                        }
                         break;
                     }
                 }
@@ -407,11 +434,19 @@ function update(time = 0) {
     const dropInterval = Math.max(100, 1000 - (level - 1) * 50);
     if (deltaTime > dropInterval) {
         if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+            lockDelayTimer = 0;
             currentTetromino.y++;
         }
         else {
-            lockTetromino();
-            spawnNewTetromino();
+            if (lockDelayTimer === 0) {
+                lockDelayTimer = time;
+            }
+            if (time - lockDelayTimer > LOOK_DELAY) {
+                lockTetromino();
+                spawnNewTetromino();
+                lockDelayTimer = 0;
+            }
+
         }
         lastTime = time;//時間更新
     }
@@ -464,6 +499,8 @@ function clearLines() {
     }
 }
 //最初のcurrentとnextの生成
-fillNextQueue();
+bag = [];
+nextQueue = [];
+refillNextQueue();
 spawnNewTetromino();
 update();
