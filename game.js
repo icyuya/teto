@@ -30,6 +30,9 @@ let linesCleared = 0;
 let bag = [];
 let lockDelayTimer = 0;
 const LOOK_DELAY = 500;
+let lockDelayResets = 0;
+const MAX_LOCK_DELAY_RESETS = 15;
+let gameState='start';
 
 
 // テトリミノの形を定義
@@ -287,20 +290,37 @@ function draw() {
     drawNextQueue();
     drawHoldPiece();
 }
-
-
+//ミノの最も低いY座標を取得する
+function getLowestY(tetromino) {
+    if (!tetromino) return -1;
+    let lowest = -1;
+    tetromino.shape.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value) {
+                const blockY = tetromino.y + y;
+                if (blockY > lowest) {
+                    lowest = blockY;
+                }
+            }
+        });
+    });
+    return lowest;
+}
 
 //キー操作
 document.addEventListener('keydown', (event) => {
     if (!currentTetromino) return;
+    
+    const isGrounded = !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1);
 
     switch (event.key) {
         case 'ArrowLeft':
             //左
             if (isValidMove(currentTetromino.shape, currentTetromino.x - 1, currentTetromino.y)) {
                 currentTetromino.x--;
-                if (lockDelayTimer > 0) {
+                if (isGrounded) {
                     lockDelayTimer = performance.now();
+                    lockDelayResets++;
                 }
             }
             break;
@@ -308,8 +328,9 @@ document.addEventListener('keydown', (event) => {
             //右
             if (isValidMove(currentTetromino.shape, currentTetromino.x + 1, currentTetromino.y)) {
                 currentTetromino.x++;
-                if (lockDelayTimer > 0) {
+                if (isGrounded) {
                     lockDelayTimer = performance.now();
+                    lockDelayResets++;
                 }
             }
             break;
@@ -317,17 +338,19 @@ document.addEventListener('keydown', (event) => {
             //下
             if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
                 currentTetromino.y++;
-                if (lockDelayTimer > 0) {
+                lockDelayResets = 0;
+                if (isGrounded) {
                     lockDelayTimer = performance.now();
+                    lockDelayResets++;
                 }
             }
             break;
         case 'ArrowUp':
             //右回転
             {
+                const oldLowestY = getLowestY(currentTetromino);
                 const rotated = rotateClockwise(currentTetromino.shape);
                 const kickPatterns = [[0, 0], [-1, 0], [1, 0], [0, -1]];
-
                 for (const [kickX, kickY] of kickPatterns) {
                     const newX = currentTetromino.x + kickX;
                     const newY = currentTetromino.y + kickY;
@@ -335,7 +358,13 @@ document.addEventListener('keydown', (event) => {
                         currentTetromino.shape = rotated;
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
-                        if (lockDelayTimer > 0) {
+                        if (isGrounded) {
+                            const newLowest = getLowestY(currentTetromino);
+                            if (newLowest > oldLowestY) {
+                                lockDelayResets = 0;
+                            } else {
+                                lockDelayResets++;
+                            }
                             lockDelayTimer = performance.now();
                         }
                         break;
@@ -346,6 +375,7 @@ document.addEventListener('keydown', (event) => {
         case 'z':
             //左回転
             {
+                const oldLowestY = getLowestY(currentTetromino);
                 const rotated = rotateCounterClockwise(currentTetromino.shape);
                 const kickPatterns = [[0, 0], [1, 0], [-1, 0], [0, -1]];
 
@@ -356,7 +386,13 @@ document.addEventListener('keydown', (event) => {
                         currentTetromino.shape = rotated;
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
-                        if (lockDelayTimer > 0) {
+                        if (isGrounded) {
+                            const newLowest = getLowestY(currentTetromino);
+                            if (newLowest > oldLowestY) {
+                                lockDelayResets = 0;
+                            } else {
+                                lockDelayResets++;
+                            }
                             lockDelayTimer = performance.now();
                         }
                         break;
@@ -429,26 +465,37 @@ function rotateCounterClockwise(matrix) {
 
 //ゲームの状態を更新
 function update(time = 0) {
+    if (!lastTime) lastTime = time;
     //経過時間
     const deltaTime = time - lastTime;
     const dropInterval = Math.max(100, 1000 - (level - 1) * 50);
     if (deltaTime > dropInterval) {
         if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
-            lockDelayTimer = 0;
             currentTetromino.y++;
+            lockDelayResets = 0;
         }
-        else {
+        lastTime = time;//時間更新
+    }
+
+    if (currentTetromino) {
+        const isGrounded = !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1);
+
+        if (isGrounded) {
             if (lockDelayTimer === 0) {
                 lockDelayTimer = time;
             }
-            if (time - lockDelayTimer > LOOK_DELAY) {
+
+            const timeSinceGrounded = time - lockDelayTimer;
+            if (timeSinceGrounded > LOOK_DELAY || lockDelayResets >= MAX_LOCK_DELAY_RESETS) {
                 lockTetromino();
                 spawnNewTetromino();
                 lockDelayTimer = 0;
+                lockDelayResets = 0;
             }
-
+        } else {
+            lockDelayTimer = 0;
+            lockDelayResets = 0;
         }
-        lastTime = time;//時間更新
     }
     draw();
     requestAnimationFrame(update);//次のフレームを要求
