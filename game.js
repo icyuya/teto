@@ -29,10 +29,10 @@ let level = 1;
 let linesCleared = 0;
 let bag = [];
 let lockDelayTimer = 0;
-const LOOK_DELAY = 500;
+const LOCK_DELAY = 500;
 let lockDelayResets = 0;
 const MAX_LOCK_DELAY_RESETS = 15;
-let gameState='start';
+let gameState = 'start';
 
 
 // テトリミノの形を定義
@@ -67,6 +67,29 @@ const TETROMINOS = {
     }
 }
 
+const KICK_DATA = {
+    JLSTZ: [
+        [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],//0=>1
+        [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],//1=>0
+        [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],//1=>2
+        [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],//2=>1
+        [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],//2=>3
+        [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],//3=>2
+        [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],//3=>0
+        [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],//0=>3
+    ],
+    I: [
+        [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],//0=>1
+        [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],//1=>0
+        [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],//1=>2
+        [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],//2=>1
+        [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],//2=>3
+        [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],//3=>2
+        [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],//3=>0
+        [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],//0=>3
+    ]
+}
+
 function generateBag() {
     let types = ['T', 'S', 'Z', 'L', 'J', 'O', 'I'];
 
@@ -75,13 +98,12 @@ function generateBag() {
         [types[i], types[j]] = [types[j], types[i]];
     }
     bag = types;
+    console.log('New Bag Generated:', bag.join(','));
 }
 
 function cloneTetromino(tetromino) {
-    return {
-        ...tetromino,
-        shape: tetromino.shape.map(row => [...row])
-    };
+    if (!tetromino) return null;
+    return JSON.parse(JSON.stringify(tetromino));
 }
 
 
@@ -111,6 +133,7 @@ function spawnNewTetromino() {
     if (currentTetromino) {
         currentTetromino.x = 3;
         currentTetromino.y = -1;
+        currentTetromino.rotationState = 0;
     }
     //ゲームオーバー判定
     if (currentTetromino && !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y)) {
@@ -124,6 +147,16 @@ function spawnNewTetromino() {
         nextQueue = [];
         bag = [];
         refillNextQueue();
+
+        currentTetromino = cloneTetromino(nextQueue.shift());
+        refillNextQueue();
+
+        if (currentTetromino) {
+            currentTetromino.x = 3;
+            currentTetromino.y = -1;
+            currentTetromino.rotationState = 0;
+        }
+        return;
     }
 }
 
@@ -310,7 +343,7 @@ function getLowestY(tetromino) {
 //キー操作
 document.addEventListener('keydown', (event) => {
     if (!currentTetromino) return;
-    
+
     const isGrounded = !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1);
 
     switch (event.key) {
@@ -336,13 +369,9 @@ document.addEventListener('keydown', (event) => {
             break;
         case 'ArrowDown':
             //下
-            if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+            if (!isGrounded) {
                 currentTetromino.y++;
                 lockDelayResets = 0;
-                if (isGrounded) {
-                    lockDelayTimer = performance.now();
-                    lockDelayResets++;
-                }
             }
             break;
         case 'ArrowUp':
@@ -350,14 +379,18 @@ document.addEventListener('keydown', (event) => {
             {
                 const oldLowestY = getLowestY(currentTetromino);
                 const rotated = rotateClockwise(currentTetromino.shape);
-                const kickPatterns = [[0, 0], [-1, 0], [1, 0], [0, -1]];
+                const from = currentTetromino.rotationState;
+                const to = (from + 1) % 4;
+                const kickTable = (currentTetromino.type === 'I') ? KICK_DATA.I : KICK_DATA.JLSTZ;
+                const kickPatterns = kickTable[from * 2];
                 for (const [kickX, kickY] of kickPatterns) {
                     const newX = currentTetromino.x + kickX;
-                    const newY = currentTetromino.y + kickY;
+                    const newY = currentTetromino.y - kickY;
                     if (isValidMove(rotated, newX, newY)) {
                         currentTetromino.shape = rotated;
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
+                        currentTetromino.rotationState = to;
                         if (isGrounded) {
                             const newLowest = getLowestY(currentTetromino);
                             if (newLowest > oldLowestY) {
@@ -377,15 +410,19 @@ document.addEventListener('keydown', (event) => {
             {
                 const oldLowestY = getLowestY(currentTetromino);
                 const rotated = rotateCounterClockwise(currentTetromino.shape);
-                const kickPatterns = [[0, 0], [1, 0], [-1, 0], [0, -1]];
+                const from = currentTetromino.rotationState;
+                const to = (from + 3) % 4;
+                const kickTable = (currentTetromino.type === 'I') ? KICK_DATA.I : KICK_DATA.JLSTZ;
+                const kickPatterns = kickTable[to * 2 + 1];
 
                 for (const [kickX, kickY] of kickPatterns) {
                     const newX = currentTetromino.x + kickX;
-                    const newY = currentTetromino.y + kickY;
+                    const newY = currentTetromino.y - kickY;
                     if (isValidMove(rotated, newX, newY)) {
                         currentTetromino.shape = rotated;
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
+                        currentTetromino.rotationState = to;
                         if (isGrounded) {
                             const newLowest = getLowestY(currentTetromino);
                             if (newLowest > oldLowestY) {
@@ -414,6 +451,7 @@ document.addEventListener('keydown', (event) => {
 
                     currentTetromino.x = 3;
                     currentTetromino.y = -1;
+                    currentTetromino.rotationState = 0;
                 }
                 else {
                     holdTetromino = cloneTetromino(TETROMINOS[typeToHold]);
@@ -486,7 +524,7 @@ function update(time = 0) {
             }
 
             const timeSinceGrounded = time - lockDelayTimer;
-            if (timeSinceGrounded > LOOK_DELAY || lockDelayResets >= MAX_LOCK_DELAY_RESETS) {
+            if (timeSinceGrounded > LOCK_DELAY || lockDelayResets >= MAX_LOCK_DELAY_RESETS) {
                 lockTetromino();
                 spawnNewTetromino();
                 lockDelayTimer = 0;
