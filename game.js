@@ -17,12 +17,14 @@ const MAX_LOCK_DELAY_RESETS = 15;
 // const ARR_INTERVAL = 50;
 const DAS_DELAY = 133;
 const ARR_INTERVAL = 1;
+const SOFT_DROP_ARR_INTERVAL = 30;
 
 // === ゲームの状態管理変数 ===
 let field, currentTetromino, nextQueue, holdTetromino, bag, inputBuffer;
 let score, level, linesCleared, canHold, lastTime, lockDelayTimer, lockDelayResets;
 let gameState = 'playing';
 let autoShiftState = { direction: null, dasStartTime: 0, arrIntervalTime: 0, isRepeating: false };
+let softDropState = { isActive: false, arrIntervalTime: 0 };
 
 // テトリミノの形を定義
 const TETROMINOS = {
@@ -95,6 +97,7 @@ function initGame() {
     refillNextQueue();
     spawnNewTetromino();
     autoShiftState = { direction: null, dasStartTime: 0, arrIntervalTime: 0, isRepeating: false }
+    softDropState = { isActive: false, arrIntervalTime: 0 };
     inputBuffer = [];
 }
 
@@ -364,6 +367,28 @@ function moveHorizontally(direction) {
     }
 }
 
+function moveDown() {
+    if (!currentTetromino) return;
+
+    if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+        currentTetromino.y++;
+        lockDelayResets = 0;
+        score++;
+        updateUI();
+        return true;
+    }
+    return false;
+}
+
+function handleSoftDrop(time) {
+    if (!currentTetromino || !softDropState.isActive) return;
+
+    while (time - softDropState.arrIntervalTime > SOFT_DROP_ARR_INTERVAL) {
+        moveDown();
+        softDropState.arrIntervalTime += SOFT_DROP_ARR_INTERVAL;
+    }
+}
+
 function handleKeyPress(key) {
     if (!currentTetromino) return;
     if (key === ' ') {
@@ -375,13 +400,6 @@ function handleKeyPress(key) {
     const isGrounded = !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1);
 
     switch (key) {
-        case 'ArrowDown':
-            //下
-            if (!isGrounded) {
-                currentTetromino.y++;
-                lockDelayResets = 0;
-            }
-            break;
         case 'ArrowUp':
             //右回転
             {
@@ -500,19 +518,26 @@ document.addEventListener('keydown', (event) => {
             autoShiftState.dasStartTime = performance.now();
             autoShiftState.isRepeating = false;
         }
+    } else if (event.key === 'ArrowDown') {
+        if (!softDropState.isActive) {
+            softDropState.isActive = true;
+            softDropState.arrIntervalTime = performance.now();
+            moveDown();
+        }
     } else {
         inputBuffer.push(event.key);
     }
 });
 
 document.addEventListener('keyup', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-        return;
-    }
-    const direction = (event.key === 'ArrowLeft') ? 'left' : 'right';
-    if (autoShiftState.direction === direction) {
-        autoShiftState.direction = null;
-        autoShiftState.isRepeating = false;
+    if (event.key == 'ArrowLeft' || event.key == 'ArrowRight') {
+        const direction = (event.key === 'ArrowLeft') ? 'left' : 'right';
+        if (autoShiftState.direction === direction) {
+            autoShiftState.direction = null;
+            autoShiftState.isRepeating = false;
+        }
+    } else if (event.key === 'ArrowDown') {
+        softDropState.isActive = false;
     }
 });
 
@@ -551,6 +576,7 @@ function update(time = 0) {
     //経過時間
     const deltaTime = time - lastTime;
     const dropInterval = Math.max(100, 1000 - (level - 1) * 50);
+    handleSoftDrop(time);
     handleHorizontalMovement(time);
     if (deltaTime > dropInterval) {
         if (currentTetromino && isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
