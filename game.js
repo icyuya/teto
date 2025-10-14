@@ -6,34 +6,23 @@ const nextcanvas = document.getElementById('next-canvas');
 const nextCtx = nextcanvas.getContext('2d');
 const holdcanvas = document.getElementById('hold-canvas');
 const holdCtx = holdcanvas.getContext('2d');
-//マスサイズ
+// === 定数定義 ===
 const TILE_SIZE = 30;
-//フィールドサイズ
 const FIELD_ROWS = 20;
 const FIELD_COLS = 10;
-//現在のミノ
-let currentTetromino;
-//次のミノ
-let nextQueue = [];
 const NEXT_QUEUE_SIZE = 5;
-
-let holdTetromino;
-let canHold = true;
-//最後に描画した時間
-let lastTime = 0;
-//ミノが落下する間隔
-const DROP_INTERVAL = 1000;
-const field = Array.from({ length: FIELD_ROWS }, () => new Array(FIELD_COLS).fill(0));
-let score = 0;
-let level = 1;
-let linesCleared = 0;
-let bag = [];
-let lockDelayTimer = 0;
 const LOCK_DELAY = 500;
-let lockDelayResets = 0;
 const MAX_LOCK_DELAY_RESETS = 15;
-let gameState = 'start';
+// const DAS_DELAY = 160;
+// const ARR_INTERVAL = 50;
+const DAS_DELAY = 133;
+const ARR_INTERVAL = 1;
 
+// === ゲームの状態管理変数 ===
+let field, currentTetromino, nextQueue, holdTetromino, bag, inputBuffer;
+let score, level, linesCleared, canHold, lastTime, lockDelayTimer, lockDelayResets;
+let gameState = 'playing';
+let autoShiftState = { direction: null, dasStartTime: 0, arrIntervalTime: 0, isRepeating: false };
 
 // テトリミノの形を定義
 const TETROMINOS = {
@@ -90,6 +79,25 @@ const KICK_DATA = {
     ]
 }
 
+function initGame() {
+    field = Array.from({ length: FIELD_ROWS }, () => new Array(FIELD_COLS).fill(0));
+
+    score = 0;
+    level = 1;
+    linesCleared = 0;
+    holdTetromino = null;
+    canHold = true;
+    lastTime = 0;
+    lockDelayTimer = 0;
+    lockDelayResets = 0;
+    bag = [];
+    nextQueue = [];
+    refillNextQueue();
+    spawnNewTetromino();
+    autoShiftState = { direction: null, dasStartTime: 0, arrIntervalTime: 0, isRepeating: false }
+    inputBuffer = [];
+}
+
 function generateBag() {
     let types = ['T', 'S', 'Z', 'L', 'J', 'O', 'I'];
 
@@ -135,27 +143,12 @@ function spawnNewTetromino() {
         currentTetromino.y = -1;
         currentTetromino.rotationState = 0;
     }
+
+
     //ゲームオーバー判定
     if (currentTetromino && !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y)) {
         alert('GAME OVER');
-        field.forEach(row => row.fill(0));
-        score = 0;
-        level = 1;;
-        linesCleared = 0;
-        holdTetromino = null;
-        canHold = true;
-        nextQueue = [];
-        bag = [];
-        refillNextQueue();
-
-        currentTetromino = cloneTetromino(nextQueue.shift());
-        refillNextQueue();
-
-        if (currentTetromino) {
-            currentTetromino.x = 3;
-            currentTetromino.y = -1;
-            currentTetromino.rotationState = 0;
-        }
+        initGame();
         return;
     }
 }
@@ -340,33 +333,48 @@ function getLowestY(tetromino) {
     return lowest;
 }
 
-//キー操作
-document.addEventListener('keydown', (event) => {
+
+
+function handleHorizontalMovement(time) {
+    if (!currentTetromino || !autoShiftState.direction) return;
+
+    if (!autoShiftState.isRepeating) {
+        if (time - autoShiftState.dasStartTime > DAS_DELAY) {
+            autoShiftState.isRepeating = true;
+            autoShiftState.arrIntervalTime = time;
+            moveHorizontally(autoShiftState.direction);
+        }
+    }
+    else {
+        while (time - autoShiftState.arrIntervalTime > ARR_INTERVAL) {
+            moveHorizontally(autoShiftState.direction);
+            autoShiftState.arrIntervalTime += ARR_INTERVAL;
+        }
+    }
+}
+
+function moveHorizontally(direction) {
+    const dir = (direction === 'left') ? -1 : 1;
+    if (isValidMove(currentTetromino.shape, currentTetromino.x + dir, currentTetromino.y)) {
+        currentTetromino.x += dir;
+        if (!isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+            lockDelayTimer = performance.now();
+            lockDelayResets++;
+        }
+    }
+}
+
+function handleKeyPress(key) {
     if (!currentTetromino) return;
+    if (key === ' ') {
+        while (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+            currentTetromino.y++;
+        }
+    }
 
     const isGrounded = !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1);
 
-    switch (event.key) {
-        case 'ArrowLeft':
-            //左
-            if (isValidMove(currentTetromino.shape, currentTetromino.x - 1, currentTetromino.y)) {
-                currentTetromino.x--;
-                if (isGrounded) {
-                    lockDelayTimer = performance.now();
-                    lockDelayResets++;
-                }
-            }
-            break;
-        case 'ArrowRight':
-            //右
-            if (isValidMove(currentTetromino.shape, currentTetromino.x + 1, currentTetromino.y)) {
-                currentTetromino.x++;
-                if (isGrounded) {
-                    lockDelayTimer = performance.now();
-                    lockDelayResets++;
-                }
-            }
-            break;
+    switch (key) {
         case 'ArrowDown':
             //下
             if (!isGrounded) {
@@ -473,7 +481,39 @@ document.addEventListener('keydown', (event) => {
             draw();
             return;
     }
-    draw();
+}
+
+//キー操作
+document.addEventListener('keydown', (event) => {
+    if (event.repeat) return;
+    if (event.key === 'Control') {
+        event.preventDefault();
+        initGame();
+        return;
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const direction = (event.key === 'ArrowLeft') ? 'left' : 'right';
+        if (autoShiftState.direction !== direction) {
+            moveHorizontally(direction);
+            autoShiftState.direction = direction;
+            autoShiftState.dasStartTime = performance.now();
+            autoShiftState.isRepeating = false;
+        }
+    } else {
+        inputBuffer.push(event.key);
+    }
+});
+
+document.addEventListener('keyup', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+        return;
+    }
+    const direction = (event.key === 'ArrowLeft') ? 'left' : 'right';
+    if (autoShiftState.direction === direction) {
+        autoShiftState.direction = null;
+        autoShiftState.isRepeating = false;
+    }
 });
 
 //右回転
@@ -503,12 +543,17 @@ function rotateCounterClockwise(matrix) {
 
 //ゲームの状態を更新
 function update(time = 0) {
+    if (inputBuffer.length > 0) {
+        const key = inputBuffer.shift();
+        handleKeyPress(key);
+    }
     if (!lastTime) lastTime = time;
     //経過時間
     const deltaTime = time - lastTime;
     const dropInterval = Math.max(100, 1000 - (level - 1) * 50);
+    handleHorizontalMovement(time);
     if (deltaTime > dropInterval) {
-        if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
+        if (currentTetromino && isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
             currentTetromino.y++;
             lockDelayResets = 0;
         }
@@ -541,6 +586,7 @@ function update(time = 0) {
 
 //ミノ設置
 function lockTetromino() {
+    if (!currentTetromino) return;
     const shape = currentTetromino.shape;
     const color = currentTetromino.color;
     for (let y = 0; y < shape.length; y++) {
@@ -584,8 +630,5 @@ function clearLines() {
     }
 }
 //最初のcurrentとnextの生成
-bag = [];
-nextQueue = [];
-refillNextQueue();
-spawnNewTetromino();
+initGame();
 update();
