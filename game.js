@@ -6,6 +6,7 @@ const nextcanvas = document.getElementById('next-canvas');
 const nextCtx = nextcanvas.getContext('2d');
 const holdcanvas = document.getElementById('hold-canvas');
 const holdCtx = holdcanvas.getContext('2d');
+
 // === 定数定義 ===
 const TILE_SIZE = 30;
 const FIELD_ROWS = 20;
@@ -21,41 +22,20 @@ const SOFT_DROP_ARR_INTERVAL = 30;
 
 // === ゲームの状態管理変数 ===
 let field, currentTetromino, nextQueue, holdTetromino, bag, inputBuffer;
-let score, level, linesCleared, canHold, lastTime, lockDelayTimer, lockDelayResets;
+let score, level, linesCleared, canHold, lastTime, lockDelayTimer, lockDelayResets, comboCounter, isBackToBack, lastMovingRotation;
 let gameState = 'playing';
 let autoShiftState = { direction: null, dasStartTime: 0, arrIntervalTime: 0, isRepeating: false };
 let softDropState = { isActive: false, arrIntervalTime: 0 };
 
 // テトリミノの形を定義
 const TETROMINOS = {
-    T: {
-        shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]],
-        color: 'purple'
-    },
-    S: {
-        shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]],
-        color: 'green'
-    },
-    Z: {
-        shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]],
-        color: 'red'
-    },
-    L: {
-        shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]],
-        color: 'orange'
-    },
-    J: {
-        shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]],
-        color: 'blue'
-    },
-    O: {
-        shape: [[0, 1, 1], [0, 1, 1], [0, 0, 0]],
-        color: 'yellow'
-    },
-    I: {
-        shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]],
-        color: 'cyan'
-    }
+    T: { shape: [[0, 1, 0], [1, 1, 1], [0, 0, 0]], color: 'purple' },
+    S: { shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]], color: 'green' },
+    Z: { shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]], color: 'red' },
+    L: { shape: [[0, 0, 1], [1, 1, 1], [0, 0, 0]], color: 'orange' },
+    J: { shape: [[1, 0, 0], [1, 1, 1], [0, 0, 0]], color: 'blue' },
+    O: { shape: [[0, 1, 1], [0, 1, 1], [0, 0, 0]], color: 'yellow' },
+    I: { shape: [[0, 0, 0, 0], [1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0]], color: 'cyan' }
 }
 
 const KICK_DATA = {
@@ -99,6 +79,9 @@ function initGame() {
     autoShiftState = { direction: null, dasStartTime: 0, arrIntervalTime: 0, isRepeating: false }
     softDropState = { isActive: false, arrIntervalTime: 0 };
     inputBuffer = [];
+    comboCounter = 0;
+    isBackToBack = false;
+    lastMovingRotation = false;
 }
 
 function generateBag() {
@@ -145,6 +128,7 @@ function spawnNewTetromino() {
         currentTetromino.x = 3;
         currentTetromino.y = -1;
         currentTetromino.rotationState = 0;
+        lastMovingRotation = false;
     }
 
 
@@ -336,8 +320,6 @@ function getLowestY(tetromino) {
     return lowest;
 }
 
-
-
 function handleHorizontalMovement(time) {
     if (!currentTetromino || !autoShiftState.direction) return;
 
@@ -360,6 +342,7 @@ function moveHorizontally(direction) {
     const dir = (direction === 'left') ? -1 : 1;
     if (isValidMove(currentTetromino.shape, currentTetromino.x + dir, currentTetromino.y)) {
         currentTetromino.x += dir;
+        lastMovingRotation = false;
         if (!isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
             lockDelayTimer = performance.now();
             lockDelayResets++;
@@ -372,6 +355,7 @@ function moveDown() {
 
     if (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
         currentTetromino.y++;
+        lastMovingRotation = false;
         lockDelayResets = 0;
         score++;
         updateUI();
@@ -391,11 +375,6 @@ function handleSoftDrop(time) {
 
 function handleKeyPress(key) {
     if (!currentTetromino) return;
-    if (key === ' ') {
-        while (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
-            currentTetromino.y++;
-        }
-    }
 
     const isGrounded = !isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1);
 
@@ -417,6 +396,7 @@ function handleKeyPress(key) {
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
                         currentTetromino.rotationState = to;
+                        lastMovingRotation = true;
                         if (isGrounded) {
                             const newLowest = getLowestY(currentTetromino);
                             if (newLowest > oldLowestY) {
@@ -449,6 +429,7 @@ function handleKeyPress(key) {
                         currentTetromino.x = newX;
                         currentTetromino.y = newY;
                         currentTetromino.rotationState = to;
+                        lastMovingRotation = true;
                         if (isGrounded) {
                             const newLowest = getLowestY(currentTetromino);
                             if (newLowest > oldLowestY) {
@@ -491,8 +472,14 @@ function handleKeyPress(key) {
             return;
         case ' '://スペース
             //ハードドロップ
+            let dropDistance = 0;
             while (isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
                 currentTetromino.y++;
+                dropDistance++;
+            }
+            if (dropDistance > 0) {
+                score += dropDistance * 2;
+                updateUI();
             }
             lockTetromino();
             spawnNewTetromino();
@@ -581,6 +568,7 @@ function update(time = 0) {
     if (deltaTime > dropInterval) {
         if (currentTetromino && isValidMove(currentTetromino.shape, currentTetromino.x, currentTetromino.y + 1)) {
             currentTetromino.y++;
+            lastMovingRotation = false;
             lockDelayResets = 0;
         }
         lastTime = time;//時間更新
@@ -610,9 +598,58 @@ function update(time = 0) {
     requestAnimationFrame(update);//次のフレームを要求
 }
 
+function checkTSpin() {
+    if (currentTetromino.type !== 'T' || !lastMovingRotation) {
+        return 'none';
+    }
+
+    const x = currentTetromino.x;
+    const y = currentTetromino.y;
+    const rotation = currentTetromino.rotationState;
+
+    const corners = [
+        { r: y, c: x },
+        { r: y, c: x + 2 },
+        { r: y + 2, c: x },
+        { r: y + 2, c: x + 2 }
+    ];
+
+    let backCorners;
+    switch (rotation) {
+        case 0:
+            backCorners = [corners[0], corners[1]]; break;
+        case 1:
+            backCorners = [corners[1], corners[3]]; break;
+        case 2:
+            backCorners = [corners[2], corners[3]]; break;
+        case 3:
+            backCorners = [corners[0], corners[2]]; break;
+    }
+    let filledCorners = 0;
+    for (const corner of corners) {
+        if (corner.c < 0 || corner.c >= FIELD_COLS || corner.r >= FIELD_ROWS || (corner.r >= 0 && field[corner.r][corner.c])) {
+            filledCorners++;
+        }
+    }
+    let filledBackCorners = 0;
+    for (const corner of backCorners) {
+        if (corner.c < 0 || corner.c >= FIELD_COLS || corner.r >= FIELD_ROWS || (corner.r >= 0 && field[corner.r][corner.c])) {
+            filledBackCorners++;
+        }
+    }
+    if (filledCorners >= 3) {
+        if (filledBackCorners >= 2) {
+            return 't-spin';
+        }
+        return 't-spin-mini';
+    }
+    return 'none';
+}
+
 //ミノ設置
 function lockTetromino() {
     if (!currentTetromino) return;
+    const tSpinType = checkTSpin();
     const shape = currentTetromino.shape;
     const color = currentTetromino.color;
     for (let y = 0; y < shape.length; y++) {
@@ -628,10 +665,22 @@ function lockTetromino() {
         }
     }
     canHold = true;
-    clearLines();
+    const clearedCount = clearLines(tSpinType);
+    if (clearedCount === 0) {
+        comboCounter = 0;
+        if (tSpinType === 't-spin') {
+            score += 400 * level;
+            isBackToBack = true;
+            console.log("T-Spin");
+        } else if (tSpinType === 't-spin-mini') {
+            score += 100 * level;
+            isBackToBack = true;
+            console.log("T-Spin Mini!");
+        }
+    }
 }
 //ライン消去
-function clearLines() {
+function clearLines(tSpinType = 'none') {
     let clearedCount = 0;
     let y = FIELD_ROWS - 1;
     while (y >= 0) {
@@ -647,14 +696,73 @@ function clearLines() {
     }
     //スコア機能
     if (clearedCount > 0) {
-        const baseScore = [0, 100, 300, 500, 800];
-        score += baseScore[clearedCount] * level;
+        let baseScore = 0;
+        let isDifficultClear = false;
+        const isTSpin = tSpinType.startsWith('t-spin');
+        if (isTSpin) {
+            isDifficultClear = true;
+            if (tSpinType === 't-spin') {
+                console.log("T-Spin Clear!");
+                switch (clearedCount) {
+                    case 1: baseScore = 800; break;
+                    case 2: baseScore = 1200; break;
+                    case 3: baseScore = 1600; break;
+                }
+            } else {
+                console.log("T-Spin Mini Clear");
+                switch (clearedCount) {
+                    case 1: baseScore = 200; break;
+                    case 2: baseScore = 400; break;
+                }
+            }
+        } else {
+            switch (clearedCount) {
+                case 1: baseScore = 100; break;
+                case 2: baseScore = 300; break;
+                case 3: baseScore = 500; break;
+                case 4:
+                    baseScore = 800;
+                    isDifficultClear = true;
+                    break;
+            }
+        }
 
+        if (isDifficultClear && isBackToBack) {
+            baseScore = Math.floor(baseScore * 1.5);
+            console.log("Back-to-Back");
+        }
+
+        const comboBonus = 50 * comboCounter * level;
+        score += comboBonus;
+        if (comboCounter > 0) {
+            console.log('Combo ${comboCounter}!: +${comboBonus}');
+        }
+
+        score += baseScore * level;
+
+        if (isDifficultClear) {
+            isBackToBack = true;
+        } else {
+            isBackToBack = false;
+        }
+        comboCounter++;
         linesCleared += clearedCount;
-
         level = Math.floor(linesCleared / 10) + 1;
+
+        const isPerfectClear = field.every(row => row.every(cell => cell === 0));
+        if (isPerfectClear) {
+            console.log("Perfect Clear!");
+            let perfectClearBonus = 0;
+            switch (clearedCount) {
+                case 1: perfectClearBonus = 800; break;
+                case 2: perfectClearBonus = 1200; break;
+                case 3: perfectClearBonus = 1800; break;
+                case 4: perfectClearBonus = 2000; break;
+            }
+            score += perfectClearBonus;
+        }
     }
+    return clearedCount;
 }
-//最初のcurrentとnextの生成
 initGame();
 update();
